@@ -1,0 +1,82 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please provide details about your idea.
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Category
+      description: What type of feature is this?
+      options:
+        - Expert Consultation (Product Manager, UX Designer, Software Architect)
+        - Document Generation (PRD, Design Spec, Tech Architecture)
+        - System Monitoring & Performance
+        - Configuration & Setup
+        - Integration with other tools
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem would this feature solve? What use case would it address?
+      placeholder: "As a [user type], I want [goal] so that [benefit]"
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature or enhancement you'd like to see
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches?
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or Use Cases
+      description: Provide specific examples of how this feature would be used
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would be helpful
+        - High - Important for my workflow
+        - Critical - Blocking my use case
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: implementation
+    attributes:
+      label: Implementation
+      options:
+        - label: I would be willing to help implement this feature
+        - label: I have experience with the relevant technologies
+        - label: I can provide additional testing/feedback
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or examples that would be helpful

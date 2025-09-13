@@ -1,0 +1,101 @@
+name: Installation Help
+description: Get help with installation or setup issues
+title: "[HELP] "
+labels: ["help wanted", "installation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help with installation or setup? Please provide the following information.
+
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation Method
+      description: How are you trying to install the MCP server?
+      options:
+        - NPM Global Installation
+        - Local Directory Installation
+        - Docker Installation
+        - Development/Source Installation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - Windows 10/11
+        - macOS
+        - Linux (Ubuntu/Debian)
+        - Linux (Other)
+        - Docker
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      description: What version of Node.js do you have installed?
+      placeholder: "Run 'node --version' to check"
+    validations:
+      required: true
+
+  - type: input
+    id: npm-version
+    attributes:
+      label: NPM Version
+      description: What version of npm do you have installed?
+      placeholder: "Run 'npm --version' to check"
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the Issue?
+      description: Describe what you're trying to do and what's not working
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps You've Tried
+      description: What installation steps have you already attempted?
+      placeholder: |
+        1. Downloaded from...
+        2. Ran command...
+        3. Got error...
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error Messages
+      description: Paste any error messages you're seeing
+      render: shell
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration Files
+      description: Share your .mcp.json configuration (remove any sensitive information)
+      render: json
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-installation Checks
+      options:
+        - label: I've read the installation guide in INSTALLATION.md
+        - label: I've verified Node.js 18+ is installed
+        - label: I've checked that Claude Code has MCP support enabled
+        - label: I've restarted Claude Code after configuration changes
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Information
+      description: Any other details that might be helpful
