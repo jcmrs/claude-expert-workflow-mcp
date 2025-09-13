@@ -96,7 +96,9 @@ jobs:
         run: |
           # Remove prepublishOnly hook to avoid linting issues
           npm pkg delete scripts.prepublishOnly
-          npm publish
+          # Configure for GitHub Packages registry
+          npm pkg set name=@jcmrs/claude-expert-workflow-mcp
+          npm publish --registry https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
