@@ -88,7 +88,7 @@ export class ConfigurationEnforcer {
 
       correlationTracker.completeRequest(trackingCorrelationId, true);
 
-      // Configuration enforcement started
+      console.log('[CONFIG-ENFORCER] Configuration enforcement started');
     } catch (error) {
       correlationTracker.completeRequest(trackingCorrelationId, false, error instanceof Error ? error.message : 'Unknown enforcement error');
       throw error;
@@ -102,7 +102,7 @@ export class ConfigurationEnforcer {
     if (this.enforcementTimer) {
       clearInterval(this.enforcementTimer);
       this.enforcementTimer = undefined;
-      // Configuration enforcement stopped
+      console.log('[CONFIG-ENFORCER] Configuration enforcement stopped');
     }
   }
 
@@ -426,7 +426,11 @@ export class ConfigurationEnforcer {
         const result = this.enforceConfiguration(currentConfig, correlationId);
 
         if (result.changes.length > 0 || result.warnings.length > 0) {
-          // Periodic enforcement detected issues: changes=${result.changes.length}, warnings=${result.warnings.length}, errors=${result.errors.length}
+          console.log('[CONFIG-ENFORCER] Periodic enforcement detected issues:', {
+            changes: result.changes.length,
+            warnings: result.warnings.length,
+            errors: result.errors.length
+          });
         }
 
         correlationTracker.completeRequest(correlationId, true);
