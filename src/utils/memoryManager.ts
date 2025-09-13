@@ -180,7 +180,7 @@ export class MemoryManager {
       }
 
       // Additional validation for required fields
-      if (!block.hasOwnProperty('content') && !block.hasOwnProperty('id')) {
+      if (!Object.prototype.hasOwnProperty.call(block, 'content') && !Object.prototype.hasOwnProperty.call(block, 'id')) {
         warnings.push(`Invalid thinking block at index ${i}: missing content or id`);
         continue;
       }
