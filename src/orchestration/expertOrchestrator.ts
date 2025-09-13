@@ -1,0 +1,275 @@
+import { 
+  ExpertType, 
+  ExpertOutput, 
+  WorkflowSession 
+} from '@/types/workflow';
+import { ExpertRole, ConversationState } from '@/types';
+import { conversationManager } from '@/state/conversationManager';
+import { workflowEngine } from './workflowEngine';
+import { buildExpertContext, formatContextForExpert } from './contextManager';
+import { logger } from '@/utils/logger';
+import { claudeClient } from '@/claude/client';
+
+// Import expert definitions
+import productManagerExpert from '@/experts/productManager';
+import uxDesignerExpert from '@/experts/uxDesigner';
+import softwareArchitectExpert from '@/experts/softwareArchitect';
+
+export class ExpertOrchestrator {
+  private experts: Record<ExpertType, ExpertRole>;
+
+  constructor() {
+    this.experts = {
+      'product_manager': productManagerExpert,
+      'ux_designer': uxDesignerExpert,
+      'software_architect': softwareArchitectExpert
+    };
+  }
+
+  /**
+   * Consult an expert with proper context from previous expert outputs
+   */
+  async consultExpert(
+    workflowId: string,
+    expertType: ExpertType,
+    userMessage: string
+  ): Promise<{
+    conversationId: string;
+    response: string;
+    topics: string[];
+  }> {
+    const workflow = workflowEngine.getWorkflowSession(workflowId);
+    if (!workflow) {
+      throw new Error(`Workflow ${workflowId} not found`);
+    }
+
+    if (workflow.currentExpert !== expertType) {
+      throw new Error(`Expected expert ${workflow.currentExpert}, got ${expertType}`);
+    }
+
+    try {
+      // Get the expert configuration
+      const expert = this.experts[expertType];
+      if (!expert) {
+        throw new Error(`Expert ${expertType} not found`);
+      }
+
+      // Create or get existing conversation for this expert in the workflow
+      const conversationId = this._getOrCreateConversation(workflowId, expertType);
+      
+      // Build context from previous expert outputs
+      const previousContext = this._buildPreviousExpertContext(workflow, expertType);
+      
+      // Format the context appropriately for this expert
+      const formattedContext = formatContextForExpert(expertType, previousContext, workflow.projectDescription);
+      
+      // Prepare the expert system prompt with context
+      const systemPromptWithContext = this._injectContextIntoPrompt(
+        expert.systemPrompt,
+        formattedContext
+      );
+
+      // Get conversation history and convert to Anthropic format
+      const conversationHistory = conversationManager.getConversationHistory(conversationId);
+      const anthropicHistory = conversationHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+      // Add user message to conversation
+      conversationManager.addMessage(conversationId, 'user', userMessage);
+
+      // Consult the expert using Claude client
+      const response = await claudeClient.consultExpert(
+        systemPromptWithContext,
+        userMessage,
+        anthropicHistory
+      );
+
+      // Add assistant response to conversation
+      conversationManager.addMessage(conversationId, 'assistant', response);
+
+      logger.info(`Expert ${expertType} consultation completed for workflow ${workflowId}`);
+
+      return {
+        conversationId,
+        response,
+        topics: expert.topics
+      };
+
+    } catch (error) {
+      logger.error(`Expert consultation failed for ${expertType} in workflow ${workflowId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete expert consultation and add output to workflow
+   */
+  async completeExpertConsultation(
+    workflowId: string,
+    expertType: ExpertType,
+    conversationId: string,
+    finalOutput: string
+  ): Promise<boolean> {
+    try {
+      const expert = this.experts[expertType];
+      if (!expert) {
+        throw new Error(`Expert ${expertType} not found`);
+      }
+
+      // Add the expert output to the workflow engine
+      const success = workflowEngine.addExpertOutput(
+        workflowId,
+        expertType,
+        conversationId,
+        finalOutput,
+        expert.topics
+      );
+
+      if (success) {
+        logger.info(`Completed expert consultation for ${expertType} in workflow ${workflowId}`);
+      } else {
+        logger.error(`Failed to complete expert consultation for ${expertType} in workflow ${workflowId}`);
+      }
+
+      return success;
+    } catch (error) {
+      logger.error(`Error completing expert consultation:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get expert configuration by type
+   */
+  getExpertConfig(expertType: ExpertType): ExpertRole | null {
+    return this.experts[expertType] || null;
+  }
+
+  /**
+   * Get all available expert types
+   */
+  getAvailableExperts(): ExpertType[] {
+    return Object.keys(this.experts) as ExpertType[];
+  }
+
+  /**
+   * Check if workflow is ready for next expert
+   */
+  isReadyForNextExpert(workflowId: string): boolean {
+    const workflow = workflowEngine.getWorkflowSession(workflowId);
+    if (!workflow) {
+      return false;
+    }
+
+    return workflow.state === 'in_progress' && workflow.currentExpert === null;
+  }
+
+  /**
+   * Get the next expert in the workflow queue
+   */
+  getNextExpert(workflowId: string): ExpertType | null {
+    const workflow = workflowEngine.getWorkflowSession(workflowId);
+    if (!workflow) {
+      return null;
+    }
+
+    const completedCount = workflow.outputs.length;
+    if (completedCount >= workflow.expertQueue.length) {
+      return null; // All experts completed
+    }
+
+    return workflow.expertQueue[completedCount];
+  }
+
+  /**
+   * Start consultation with the next expert in the workflow
+   */
+  async startNextExpertConsultation(
+    workflowId: string,
+    userMessage?: string
+  ): Promise<{
+    expertType: ExpertType;
+    conversationId: string;
+    response: string;
+    topics: string[];
+  }> {
+    // Progress workflow to next expert
+    const progressed = workflowEngine.progressWorkflow(workflowId);
+    if (!progressed) {
+      throw new Error(`Failed to progress workflow ${workflowId}`);
+    }
+
+    const workflow = workflowEngine.getWorkflowSession(workflowId);
+    if (!workflow || !workflow.currentExpert) {
+      throw new Error(`No current expert available in workflow ${workflowId}`);
+    }
+
+    const expertType = workflow.currentExpert;
+    
+    // Use project description as default message if none provided
+    const message = userMessage || workflow.projectDescription;
+
+    const result = await this.consultExpert(workflowId, expertType, message);
+
+    return {
+      expertType,
+      ...result
+    };
+  }
+
+  // Private helper methods
+
+  /**
+   * Get or create a conversation for an expert within a workflow
+   */
+  private _getOrCreateConversation(workflowId: string, expertType: ExpertType): string {
+    // Use a consistent conversation ID pattern for workflow experts
+    const conversationId = `${workflowId}_${expertType}`;
+    
+    // Check if conversation already exists
+    const existingConversation = conversationManager.getConversation(conversationId);
+    if (!existingConversation) {
+      conversationManager.createConversation(conversationId);
+    }
+
+    return conversationId;
+  }
+
+  /**
+   * Build context from previous expert outputs
+   */
+  private _buildPreviousExpertContext(workflow: WorkflowSession, currentExpert: ExpertType): ExpertOutput[] {
+    const currentExpertIndex = workflow.expertQueue.indexOf(currentExpert);
+    if (currentExpertIndex <= 0) {
+      return []; // First expert or expert not found
+    }
+
+    // Return outputs from all previous experts
+    return workflow.outputs.slice(0, currentExpertIndex);
+  }
+
+  /**
+   * Inject context into expert system prompt
+   */
+  private _injectContextIntoPrompt(systemPrompt: string, context: string): string {
+    if (!context.trim()) {
+      return systemPrompt;
+    }
+
+    const contextSection = `
+CONTEXT FROM PREVIOUS EXPERTS:
+${context}
+
+Please use this context to inform your consultation while focusing on your specific expertise and responsibilities.
+
+---
+
+${systemPrompt}`;
+
+    return contextSection;
+  }
+}
+
+export const expertOrchestrator = new ExpertOrchestrator();

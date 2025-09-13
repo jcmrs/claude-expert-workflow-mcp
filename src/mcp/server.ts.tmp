@@ -1,0 +1,234 @@
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  McpError,
+  ErrorCode,
+} from '@modelcontextprotocol/sdk/types.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ConsultExpertSchema, GeneratePRDSchema, GenerateDesignSpecSchema } from '@/types';
+import { productManagerExpert } from '@/experts/productManager';
+import { uxDesignerExpert } from '@/experts/uxDesigner';
+import { conversationManager } from '@/state/conversationManager';
+import { claudeClient } from '@/claude/client';
+import { generatePRD } from '@/templates/prd';
+import { generateDesignSpec } from '@/templates/designSpec';
+import { logger } from '@/utils/logger';
+
+export class ClaudeExpertMCPServer {
+  private server: Server;
+
+  constructor() {
+    this.server = new Server(
+      {
+        name: 'claude-expert-workflow',
+        version: '1.0.0',
+      },
+      {
+        capabilities: {
+          tools: {},
+        },
+      }
+    );
+
+    this.setupToolHandlers();
+  }
+
+  private setupToolHandlers(): void {
+    // List available tools
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return {
+        tools: [
+          {
+            name: 'consultProductManager',
+            description: 'Consult with AI Product Manager expert for product planning and requirements',
+            inputSchema: ConsultExpertSchema,
+          },
+          {
+            name: 'consultUXDesigner',
+            description: 'Consult with AI UX Designer expert for user experience and interface design',
+            inputSchema: ConsultExpertSchema,
+          },
+          {
+            name: 'generatePRD',
+            description: 'Generate Product Requirements Document from conversation',
+            inputSchema: GeneratePRDSchema,
+          },
+          {
+            name: 'generateDesignSpec',
+            description: 'Generate Design Specification Document from conversation',
+            inputSchema: GenerateDesignSpecSchema,
+          },
+        ],
+      };
+    });
+
+    // Handle tool calls
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      try {
+        switch (name) {
+          case 'consultProductManager':
+            return await this.handleConsultProductManager(args);
+          case 'consultUXDesigner':
+            return await this.handleConsultUXDesigner(args);
+          case 'generatePRD':
+            return await this.handleGeneratePRD(args);
+          case 'generateDesignSpec':
+            return await this.handleGenerateDesignSpec(args);
+          default:
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+        }
+      } catch (error) {
+        logger.error(`Tool ${name} error:`, error);
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        );
+      }
+    });
+  }
+
+  private async handleConsultProductManager(args: any) {
+    const input = ConsultExpertSchema.parse(args);
+    
+    // Get or create conversation
+    const conversationId = input.conversationId || conversationManager.createConversation();
+    
+    // Add user message to conversation
+    conversationManager.addMessage(conversationId, 'user', input.projectInfo);
+    
+    // Get conversation history for context
+    const history = conversationManager.getConversationHistory(conversationId);
+    const claudeMessages = history.slice(0, -1).map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content
+    }));
+
+    // Consult with Product Manager expert
+    const response = await claudeClient.consultExpert(
+      productManagerExpert.systemPrompt,
+      input.projectInfo,
+      claudeMessages
+    );
+
+    // Add expert response to conversation
+    conversationManager.addMessage(conversationId, 'assistant', response);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: response,
+        },
+      ],
+      isError: false,
+      _meta: {
+        conversationId,
+        expert: 'Product Manager'
+      }
+    };
+  }
+
+  private async handleConsultUXDesigner(args: any) {
+    const input = ConsultExpertSchema.parse(args);
+    
+    // Get or create conversation
+    const conversationId = input.conversationId || conversationManager.createConversation();
+    
+    // Add user message to conversation
+    conversationManager.addMessage(conversationId, 'user', input.projectInfo);
+    
+    // Get conversation history for context
+    const history = conversationManager.getConversationHistory(conversationId);
+    const claudeMessages = history.slice(0, -1).map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content
+    }));
+
+    // Consult with UX Designer expert
+    const response = await claudeClient.consultExpert(
+      uxDesignerExpert.systemPrompt,
+      input.projectInfo,
+      claudeMessages
+    );
+
+    // Add expert response to conversation
+    conversationManager.addMessage(conversationId, 'assistant', response);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: response,
+        },
+      ],
+      isError: false,
+      _meta: {
+        conversationId,
+        expert: 'UX Designer'
+      }
+    };
+  }
+
+  private async handleGeneratePRD(args: any) {
+    const input = GeneratePRDSchema.parse(args);
+    
+    const conversation = conversationManager.getConversation(input.conversationId);
+    if (!conversation) {
+      throw new Error(`Conversation ${input.conversationId} not found`);
+    }
+
+    // Generate PRD from conversation history
+    const prd = await generatePRD(conversation, input.projectName);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: prd,
+        },
+      ],
+      isError: false,
+      _meta: {
+        conversationId: input.conversationId,
+        documentType: 'PRD'
+      }
+    };
+  }
+
+  private async handleGenerateDesignSpec(args: any) {
+    const input = GenerateDesignSpecSchema.parse(args);
+    
+    const conversation = conversationManager.getConversation(input.conversationId);
+    if (!conversation) {
+      throw new Error(`Conversation ${input.conversationId} not found`);
+    }
+
+    // Generate Design Specification from conversation history
+    const designSpec = await generateDesignSpec(conversation, input.projectName);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: designSpec,
+        },
+      ],
+      isError: false,
+      _meta: {
+        conversationId: input.conversationId,
+        documentType: 'Design Specification'
+      }
+    };
+  }
+
+  async start(): Promise<void> {
+    const transport = new StdioServerTransport();
+    await this.server.connect(transport);
+    logger.info('Claude Expert Workflow MCP server started');
+  }
+}
+
+export const mcpServer = new ClaudeExpertMCPServer();
