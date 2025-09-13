@@ -64,8 +64,8 @@ jobs:
 
       - name: Publish to NPM
         run: |
-          # Copy production package.json to avoid prepublishOnly hook
-          cp package-production.json package.json
+          # Remove prepublishOnly hook to avoid linting issues
+          npm pkg delete scripts.prepublishOnly
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -94,8 +94,8 @@ jobs:
 
       - name: Publish to GitHub Packages
         run: |
-          # Copy production package.json to avoid prepublishOnly hook
-          cp package-production.json package.json
+          # Remove prepublishOnly hook to avoid linting issues
+          npm pkg delete scripts.prepublishOnly
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
