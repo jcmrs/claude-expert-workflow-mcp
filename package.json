@@ -1,6 +1,6 @@
 {
   "name": "claude-expert-workflow-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Production-ready MCP server for AI-powered product development consultation through specialized expert roles. Enterprise-grade with memory management, monitoring, and Claude Code integration.",
   "type": "module",
   "main": "dist/complete-server.js",
