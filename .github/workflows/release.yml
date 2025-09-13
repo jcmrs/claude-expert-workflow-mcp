@@ -63,7 +63,10 @@ jobs:
         run: npm run build
 
       - name: Publish to NPM
-        run: npm publish --access public
+        run: |
+          # Copy production package.json to avoid prepublishOnly hook
+          cp package-production.json package.json
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -90,7 +93,10 @@ jobs:
         run: npm run build
 
       - name: Publish to GitHub Packages
-        run: npm publish
+        run: |
+          # Copy production package.json to avoid prepublishOnly hook
+          cp package-production.json package.json
+          npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
